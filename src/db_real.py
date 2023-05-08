@@ -3,7 +3,7 @@ from sqlite3 import IntegrityError
 import datetime
 
 # установите путь к базе данных, если он отличается от директории с программой
-connect = sqlite3.connect('C:/Users/stepa/Desktop/Учеба/3 курс/Майнор/easy_meet_db/easy_meet.db')
+connect = sqlite3.connect('easy_meet.db')
 connect.execute("PRAGMA foreign_keys = 1")
 cursor = connect.cursor()
 
@@ -40,7 +40,7 @@ def insert(table_name, record):
 def create_group(date, address, coordinates, owner_id):
     # datetime_str = date + ' ' + time
     # record = [address, datetime_str]
-    record = [address, date, coordinates, owner_id]
+    record = [address, date, coordinates[0], coordinates[1], owner_id]
     insert('groups', record)
     group_id = select(
         f'select id from groups where destination = "{address}" and meet_time = "{date}" and owner_id = {owner_id}')
@@ -53,8 +53,9 @@ def create_trip(group_id, user_id, departure, transport_type, interim_point=None
 
 
 def create_user(chat_id, username, first_name=None, last_name=None):
-    record = [chat_id, username, first_name, last_name]
-    insert('users', record)
+    if not user_exist(username):
+        record = [chat_id, username, first_name, last_name]
+        insert('users', record)
 
 
 def get_chat_id_by_username(username):

@@ -3,12 +3,24 @@ import requests
 import json
 import logging
 from geopy.geocoders import Nominatim
+from io import BytesIO
 
 FORMAT = '%(asctime)s - [%(levelname)s] -  %(name)s - (%(filename)s).%(funcName)s(%(lineno)d) - %(message)s'
 logging.basicConfig(format=FORMAT)
 logger = logging.getLogger(__name__)
 
 GEO_API_KEY = "ed7c0fbb-cd58-48b1-b23c-c44f91d321df"
+
+
+def get_map_by_coordinates(latitude: float, longitude: float):
+    try:
+        url = f"https://static-maps.yandex.ru/1.x/?ll={longitude},{latitude}&size=450,450&z=16&l=map"
+        response = requests.get(url)
+        image_bytes = BytesIO(response.content)
+        return image_bytes
+    except Exception as ex:
+        logger.warning(ex)
+        return None
 
 
 def get_coordinates_by_address(address: str):
