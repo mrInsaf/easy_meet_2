@@ -3,7 +3,7 @@ from sqlite3 import IntegrityError
 import datetime
 
 # установите путь к базе данных, если он отличается от директории с программой
-connect = sqlite3.connect('/Users/eliseymuxin/PycharmProjects/easy_meet_2/src/easy_meet.db')
+connect = sqlite3.connect('easy_meet.db')
 connect.execute("PRAGMA foreign_keys = 1")
 cursor = connect.cursor()
 
