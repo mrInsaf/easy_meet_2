@@ -7,7 +7,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQu
 from aiogram.utils.callback_data import CallbackData
 import asyncio
 import logging
-from geo_api import get_coordinates_by_address, get_data_by_coordinates
+from geo_api import get_coordinates_by_address, get_data_by_coordinates, get_map_by_coordinates
 from db import db_add_group, db_create_user, check_user_in_group, user_exist, get_chat_id_by_username, \
     add_user_to_group, see_group_list, update_departure
 import db_real
@@ -19,6 +19,7 @@ from aiogram_calendar import simple_cal_callback, SimpleCalendar, dialog_cal_cal
 import datetime
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.types import PhotoSize
 
 
 class CreateGroupState(StatesGroup):
@@ -82,7 +83,6 @@ async def start_command(massage: types.Message, state: FSMContext):
 
 @dp.callback_query_handler(state=StartState.start_menu)
 async def start_processing(callback: types.CallbackQuery, state: FSMContext):
-    print('YA TUT')
     if callback.data == 'create_group':
         await CreateGroupState.date.set()
         await input_date(callback.message)
@@ -101,7 +101,6 @@ async def start_processing(callback: types.CallbackQuery, state: FSMContext):
         await CreateTripState.invitor.set()
         await bot.send_message(chat_id=callback.from_user.id, text='Введите ID группы: ')
 
-#
 
 @dp.message_handler(commands=["help"])
 async def help_command(massage: types.Message):
@@ -138,14 +137,13 @@ async def ask_to_add_user_to_group(message: Message, state: FSMContext):
             accept = types.InlineKeyboardButton(text='Принять', callback_data="user accept join to group")
             decline = types.InlineKeyboardButton(text='Отказаться', callback_data="user decline join to group")
             keyboard.add(accept, decline)
-            await bot.send_message(owner_id, f"Пользователь {message.from_user.username} хочет вступить в группу {group_id}",
+            await bot.send_message(owner_id,
+                                   f"Пользователь {message.from_user.username} хочет вступить в группу {group_id}",
                                    reply_markup=keyboard)
             await CreateTripState.group_id.set()
         else:
             await bot.send_message(message.from_user.id,
                                    f'Вы уже состоите в мероприятии {group_id}')
-
-
 
 
 async def invite_user_to_join_group(group_id, my_username, invite_username):
@@ -310,7 +308,10 @@ async def input_address(message: Message, state: FSMContext):
         raise ValueError("Неправильный адрес")
     else:
         await state.update_data(address=message.text)
-        await message.answer(f'Вы ввели адрес с координатами: {address_coordinates}')
+        map = get_map_by_coordinates(address_coordinates[0], address_coordinates[1])
+        if map:
+            await message.answer('Вы выбрали следующий адресс')
+            await message.answer_photo(photo=map)
     await state.update_data(coordinates=str(address_coordinates))
     await CreateGroupState.db_push.set()
 
@@ -319,7 +320,6 @@ async def input_address(message: Message, state: FSMContext):
 async def db_push(message: Message, state: FSMContext):
     data = await state.get_data()
     datetime_obj = datetime.datetime.combine(data['date'], data['time'])
-    print(data)
     group_id = db_real.create_group(datetime_obj, data['address'], data['coordinates'], message.from_user.id)
     await state.update_data(db_push=group_id)
     await message.reply(f'ID вашей встречи: {group_id}')
