@@ -8,8 +8,6 @@ from aiogram.utils.callback_data import CallbackData
 import asyncio
 import logging
 from geo_api import get_coordinates_by_address, get_data_by_coordinates, get_map_by_coordinates
-from db import db_add_group, db_create_user, check_user_in_group, user_exist, get_chat_id_by_username, \
-    add_user_to_group, see_group_list, update_departure
 import db_real
 from weather import get_weather_by_coordinates
 from aiogram.dispatcher import FSMContext
@@ -19,7 +17,7 @@ from aiogram_calendar import simple_cal_callback, SimpleCalendar, dialog_cal_cal
 import datetime
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.types import PhotoSize
+from asyncio import sleep
 
 
 class CreateGroupState(StatesGroup):
@@ -58,26 +56,26 @@ dp = Dispatcher(bot, storage=storage)
 
 
 @dp.message_handler(commands=["start"])
-async def start_command(massage: types.Message, state: FSMContext):
+async def start_command(message: types.Message, state: FSMContext):
     try:
-        db_real.create_user(massage.from_user.id, massage.from_user.username, massage.from_user.first_name,
-                            massage.from_user.last_name)
+        db_real.create_user(message.from_user.id, message.from_user.username, message.from_user.first_name,
+                            message.from_user.last_name)
     except Exception as ex:
         logger.warning(ex)
     finally:
-        await massage.reply(
-            f"Привет, {massage.from_user.first_name}, я EasyMeet.\nПопробуй команду /help чтобы посмотреть на что я способен.")
+        await message.reply(
+            f"Привет, {message.from_user.first_name}, я EasyMeet.\nПопробуй команду /help чтобы посмотреть на что я способен.")
 
     kb = InlineKeyboardMarkup()
     buttons = [InlineKeyboardButton(text='Создать встречу', callback_data='create_group'),
                InlineKeyboardButton(text='Присоединиться к встрече', callback_data='join_group')]
 
     your_groups = db_real.select(
-        f'select * from groups where owner_id = {massage.from_user.id} and meet_time >= date()')
+        f'select * from groups where owner_id = {message.from_user.id} and meet_time >= date()')
     if len(your_groups):
         buttons.append(InlineKeyboardButton(text='Пригласить на встречу', callback_data='invite_user'))
     kb.add(*buttons)
-    await massage.reply(text='Выберите желаемое действие', reply_markup=kb)
+    await message.reply(text='Выберите желаемое действие', reply_markup=kb)
     await StartState.start_menu.set()
 
 
@@ -103,7 +101,7 @@ async def start_processing(callback: types.CallbackQuery, state: FSMContext):
 
 
 @dp.message_handler(commands=["help"])
-async def help_command(massage: types.Message):
+async def help_command(message: types.Message):
     help_data = "/create_group [дата] [время] [адрес] - создать группу поездки. Бот вернёт id группы\n" \
                 "/change_group_date [дата] - изменить дату встречи\n" \
                 "/change_group_time [время] - изменить время встречи\n" \
@@ -112,14 +110,15 @@ async def help_command(massage: types.Message):
                 "/delete_user_from_group [id группы] [username] - удалить пользователя из группы\n" \
                 "/ask_to_join_group [id группы] - попросить присоединиться к группе\n" \
                 "/leave_group [id группы] - покинуть группу\n" \
-                "/get_group_list [id группы] - посмотреть участников группы\n" \
-                "/add_departure [id группы] [адрес] - задать место отправления для пользователя в группе\n" \
+                "/get_my_group_list - посмотреть мои группы\n" \
+                "/get_group_info [id группы] - посмотреть участников группы\n" \
+                "/change_departure [id группы] - задать место отправления для пользователя в группе\n" \
                 "/get_meet_data [id группы] - посомтреть информацию по поездке\n" \
                 "/change_departure [id группы] [адрес] - измениить место отправления для пользователя в группе\n" \
                 "/notice_me [id группы] [количество минут] - попросить бота напомнить о поездке за определённое количтво минут\n" \
                 "/get_weather [адрес] - текущий прогноз погоды по адресу\n" \
                 "/get_weather [id группы] - текущий прогноз погоды по адресу встречи\n"
-    await bot.send_message(massage.from_user.id, help_data)
+    await bot.send_message(message.from_user.id, help_data)
 
 
 @dp.message_handler(state=CreateTripState.invitor)
@@ -146,6 +145,53 @@ async def ask_to_add_user_to_group(message: Message, state: FSMContext):
                                    f'Вы уже состоите в мероприятии {group_id}')
 
 
+@dp.message_handler(commands=["notice_me"])
+async def notice_me(message: types.Message):
+    group_id = message.text.split()[1]
+    if not db_real.check_group_by_id(group_id):
+        await message.reply('Группы с таким ID нет, попробуйте еще раз')
+        return
+    if not db_real.check_user_in_group(group_id, message.from_user.username):
+        await message.reply('Вы не состоите в этой группе')
+        return
+
+    if db_real.is_noticed(group_id, message.from_user.id):
+        await message.reply('Я помню про тебя')
+        return
+
+    await message.answer("Я предупрежу вас о выходе")
+    db_real.set_noticed(group_id, message.from_user.id)
+
+    meet_address, meet_time = db_real.get_group_data(group_id)
+    now = datetime.datetime.now()
+    datetime_object = datetime.datetime.strptime(meet_time, '%Y-%m-%d %H:%M:%S')
+    result = datetime_object - now
+
+    await sleep(result.total_seconds())
+    await bot.send_message(message.from_user.id, f"Вам пора на встречу {group_id}. По адресу: {meet_address}.")
+
+
+@dp.message_handler(commands=["get_group_info"])
+async def get_group_info(message: types.Message):
+    group_id = message.text.split()[1]
+    if not db_real.check_group_by_id(group_id):
+        await message.reply('Группы с таким ID нет, попробуйте еще раз')
+    else:
+        info = db_real.get_group_data(group_id)
+        await message.answer(f"Место втречи: {info[0]}\nВремя и дата: {info[1]}\n")
+
+
+@dp.message_handler(commands=["get_my_group_list"])
+async def get_my_group_list(message: types.Message):
+    group_data = db_real.get_user_groups(message.from_user.id)
+    text = ""
+    for info in group_data:
+        text += f"\tГруппа {info[0]}:\n"
+        text += f"Место втречи: {info[3]}\nВремя и дата: {info[4]}\n"
+        text += f"Место отправления: {info[1]}\nЭто займёт: {info[2]}\n\n"
+    await message.answer(text)
+
+
 async def invite_user_to_join_group(group_id, my_username, invite_username):
     keyboard = types.InlineKeyboardMarkup()
     menu_1 = types.InlineKeyboardButton(text='Присоединиться', callback_data="user accept invite to group")
@@ -158,23 +204,21 @@ async def invite_user_to_join_group(group_id, my_username, invite_username):
                            reply_markup=keyboard)
 
 
-@dp.message_handler(state=AddUserState.get_username)
-async def user_to_group(massage: types.Message, state=FSMContext):
-    username = massage.text
-    data = await state.get_data()
-    group_id = data.get('get_group_id')
+@dp.message_handler(commands=["add_user_to_group"])
+async def user_to_group(message: types.Message):
+    message_data = message.text.split()
     try:
+        group_id = message_data[1]
+        username = message_data[2]
         if not db_real.user_exist(username):
             raise RuntimeError("User does not exist")
         if not db_real.check_user_in_group(group_id, username):
-            await AddUserState.add_user.set()
-            await invite_user_to_join_group(group_id, massage.from_user.username, username)
-            await state.finish()
+            await invite_user_to_join_group(group_id, message.from_user.username, username)
         else:
-            await bot.send_message(massage.from_user.id, "Пользователь уже в группе")
+            await bot.send_message(message.from_user.id, "Пользователь уже в группе")
     except Exception as ex:
         logger.warning(ex)
-        await massage.reply("Неправильный ввод")
+        await message.reply("Неправильный ввод")
 
 
 @dp.callback_query_handler(state=AddUserState.get_group_id)
@@ -186,8 +230,8 @@ async def input_user(callback: CallbackQuery, state: FSMContext):
 
 
 @dp.message_handler(commands=["get_group_list"])
-async def get_group_list(massage: types.Message):
-    trip_data = massage.text.split()
+async def get_group_list(message: types.Message):
+    trip_data = message.text.split()
     print(trip_data)
     try:
         group_id = int(trip_data[1])
@@ -195,44 +239,38 @@ async def get_group_list(massage: types.Message):
                                     f'group_id = {group_id}')
         print(group_list)
         if len(group_list):
-            await massage.reply(f"Участники группы: {', '.join(group_list)}")
+            await message.reply(f"Участники группы: {', '.join(group_list)}")
         else:
-            await massage.reply("Группа пока пуста(")
+            await message.reply("Группа пока пуста(")
     except Exception as ex:
         logger.warning(ex)
-        await massage.reply("Неправильный ввод")
+        await message.reply("Неправильный ввод")
 
 
 @dp.message_handler(commands=["get_weather"])
-async def weather_by_address(massage: types.Message):
+async def weather_by_address(message: types.Message):
     try:
-        trip_address = ' '.join(massage.text.split()[1:])
+        trip_address = ' '.join(message.text.split()[1:])
         address_coordinates = get_coordinates_by_address(trip_address)
         if not address_coordinates:
             raise ValueError("Неправильный адрес")
         weather = get_weather_by_coordinates(address_coordinates)
-        await bot.send_message(massage.from_user.id, weather)
+        await bot.send_message(message.from_user.id, weather)
     except Exception as ex:
         logger.warning(ex)
-        await massage.reply("Ты что-то ввёл не так(")
+        await message.reply("Ты что-то ввёл не так(")
 
 
-@dp.message_handler(commands=["add_departure"])
-async def add_departure(massage: types.Message):
-    trip_data = massage.text.split()
+@dp.message_handler(commands=["change_departure"])
+async def add_departure(message: types.Message, state: FSMContext):
     try:
+        trip_data = message.text.split()
         group_id = int(trip_data[1])
-        trip_address = ' '.join(trip_data[2:])
-        address_coordinates = get_coordinates_by_address(trip_address)
-        if not address_coordinates:
-            raise ValueError("Неправильный адрес")
-        if update_departure(group_id, massage.from_user.id, address_coordinates):
-            await bot.send_message(massage.from_user.id, "Адрес успешно изменён")
-        else:
-            raise RuntimeError("cant find trip by group_id user_id")
+        await state.update_data(group_id=group_id)
+        await create_trip(message.from_user.id)
     except Exception as ex:
         logger.warning(ex)
-        await massage.reply("Ты что-то ввёл не так(")
+        await message.reply("Ты что-то ввёл не так(")
 
 
 @dp.callback_query_handler(state=CreateTripState.group_id)
@@ -312,7 +350,8 @@ async def input_address(message: Message, state: FSMContext):
         if map:
             await message.answer('Вы выбрали следующий адресс')
             await message.answer_photo(photo=map)
-    await state.update_data(coordinates=str(address_coordinates))
+    await state.update_data(latitude=address_coordinates[0])
+    await state.update_data(longitude=address_coordinates[1])
     await CreateGroupState.db_push.set()
 
 
@@ -320,7 +359,8 @@ async def input_address(message: Message, state: FSMContext):
 async def db_push(message: Message, state: FSMContext):
     data = await state.get_data()
     datetime_obj = datetime.datetime.combine(data['date'], data['time'])
-    group_id = db_real.create_group(datetime_obj, data['address'], data['coordinates'], message.from_user.id)
+    group_id = db_real.create_group(datetime_obj, data['address'], message.from_user.id, data['latitude'],
+                                    data['longitude'])
     await state.update_data(db_push=group_id)
     await message.reply(f'ID вашей встречи: {group_id}')
     await state.finish()
@@ -343,9 +383,13 @@ async def input_departure(message: Message, state: FSMContext):
         raise ValueError("Неправильный адрес")
     else:
         await state.update_data(departure=message.text)
-        await message.answer(f'Вы ввели адрес с координатами: {address_coordinates}')
+        map = get_map_by_coordinates(address_coordinates[0], address_coordinates[1])
+        if map:
+            await message.answer('Вы выбрали следующий адресс')
+            await message.answer_photo(photo=map)
 
     await state.update_data(departure=message.text)
+    await state.update_data(departure_coord=address_coordinates)
     car_button = InlineKeyboardButton("Автомобиль", callback_data="car")
     public_transport_button = InlineKeyboardButton("Общественный транспорт", callback_data="public transport")
 
@@ -357,26 +401,31 @@ async def input_departure(message: Message, state: FSMContext):
 
 @dp.callback_query_handler(state=CreateTripState.transport_type)
 async def input_transport_type(callback_query: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
+    try:
+        if callback_query.data == "car":
+            await callback_query.answer('Вы выбрали автомобиль')
+            await state.update_data(transport_type='jam')
 
-    if callback_query.data == "car":
-        await callback_query.answer('Вы выбрали автомобиль')
-        await state.update_data(transport_type='car')
+        elif callback_query.data == "public transport":
+            await state.update_data(transport_type='taxi')
+            await callback_query.answer('Вы выбрали общественный транспорт')
 
-    elif callback_query.data == "public transport":
-        await state.update_data(transport_type='public transport')
-        await callback_query.answer('Вы выбрали общественный транспорт')
+        else:
+            await callback_query.answer('Я тупой дебил, не понимаю, на какую кнопку вы нажали')
 
-    else:
-        await callback_query.answer('Я тупой дебил, не понимаю, на какую кнопку вы нажали')
-
-    data = await state.get_data()
-    db_real.create_trip(data['group_id'], callback_query.from_user.id, data['departure'], data['transport_type'])
-    await bot.send_message(callback_query.from_user.id, 'Готово, рассчитываю время выхода...')
-    await bot.send_message(callback_query.from_user.id, f"Вы присоединились к группе {data['group_id']}!")
-    await bot.send_message(data['invitor'],
-                           f"Пользователь {callback_query.from_user.username} присоединился к группе {data['group_id']}")
-    await state.finish()
+        data = await state.get_data()
+        await bot.send_message(callback_query.from_user.id, 'Рассчитываю время поездки')
+        arrival = db_real.get_arrival_coordinates(data['group_id'])
+        trip_data = get_data_by_coordinates(arrival, data['departure_coord'], "test")  # data['transport_type'])
+        await bot.send_message(callback_query.from_user.id, f"Ваша поездка затратит {trip_data[0] // 60} минут.")
+        db_real.create_trip(data['group_id'], callback_query.from_user.id, data['departure'], data['transport_type'],
+                            trip_data[0] // 60)
+        await bot.send_message(callback_query.from_user.id, f"Вы присоединились к группе {data['group_id']}!")
+        await bot.send_message(data['invitor'],
+                               f"Пользователь {callback_query.from_user.username} присоединился к группе {data['group_id']}")
+        await state.finish()
+    except Exception as ex:
+        logger.warning(ex)
 
 
 if __name__ == "__main__":
