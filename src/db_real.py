@@ -45,7 +45,7 @@ def create_group(date, address, owner_id, lat, long):
     insert('groups', record)
     group_id = select(
         f'select id from groups where destination = "{address}" and meet_time = "{date}" and owner_id = {owner_id}')
-    return group_id[0]
+    return group_id[0][0]
 
 
 def create_trip(group_id, chat_id, departure, transport_type, trip_time, interim_point=''):

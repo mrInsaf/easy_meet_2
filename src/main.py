@@ -18,6 +18,7 @@ import datetime
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from asyncio import sleep
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 
 class CreateGroupState(StatesGroup):
@@ -53,6 +54,13 @@ logger = logging.getLogger(__name__)
 TOKEN = '6234694339:AAFV3O4emFYQmIxD307xvDw9Kde5rpb8OH0'
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot, storage=storage)
+
+
+def create_navigation_keyboard():
+    back_button = types.InlineKeyboardButton("Назад", callback_data="back")
+    home_button = types.InlineKeyboardButton("На главную", callback_data="home")
+    return [back_button, home_button]
+
 
 
 @dp.message_handler(commands=["start"])
@@ -93,7 +101,7 @@ async def start_processing(callback: types.CallbackQuery, state: FSMContext):
                    for td in time_dest]
         kb.add(*buttons)
         await bot.send_message(chat_id=callback.from_user.id,
-                               text='Выберите поездку, в котопрую хотите добавить пользователя', reply_markup=kb)
+                               text='Выберите поездку, в которую хотите добавить пользователя', reply_markup=kb)
         await AddUserState.get_group_id.set()
     if callback.data == 'join_group':
         await CreateTripState.invitor.set()
@@ -279,7 +287,8 @@ async def join_trip(callback: types.CallbackQuery, state: FSMContext):
         await bot.send_message(chat_id=callback.from_user.id, text='Вы приняли ')
 
 
-@dp.callback_query_handler()
+@dp.callback_query_handler(
+    lambda callback: callback.data == 'user accept invite to group' or callback.data == 'user decline invite to group')
 async def trip_callback(callback: types.CallbackQuery, state: FSMContext):
     await bot.edit_message_reply_markup(
         chat_id=callback.from_user.id,
@@ -415,8 +424,9 @@ async def input_transport_type(callback_query: CallbackQuery, state: FSMContext)
 
         data = await state.get_data()
         await bot.send_message(callback_query.from_user.id, 'Рассчитываю время поездки')
+        print('data is:', data)
         arrival = db_real.get_arrival_coordinates(data['group_id'])
-        trip_data = get_data_by_coordinates(arrival, data['departure_coord'], "test")  # data['transport_type'])
+        trip_data = get_data_by_coordinates(arrival, data['departure_coord'], data['transport_type'])  # data['transport_type']
         await bot.send_message(callback_query.from_user.id, f"Ваша поездка затратит {trip_data[0] // 60} минут.")
         db_real.create_trip(data['group_id'], callback_query.from_user.id, data['departure'], data['transport_type'],
                             trip_data[0] // 60)
