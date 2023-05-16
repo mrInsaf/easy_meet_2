@@ -33,22 +33,24 @@ def insert(table_name, record):
     else:
         query = f"""INSERT INTO {table_name} VALUES ({','.join(['?'] * len(record))});"""
 
+    print(record)
     cursor.execute(query, record)
     connect.commit()
 
 
-def create_group(date, address, coordinates, owner_id):
+def create_group(date, address, owner_id, lat, long):
     # datetime_str = date + ' ' + time
     # record = [address, datetime_str]
-    record = [address, date, coordinates[0], coordinates[1], owner_id]
+    record = [address, date, owner_id, lat, long]
     insert('groups', record)
     group_id = select(
         f'select id from groups where destination = "{address}" and meet_time = "{date}" and owner_id = {owner_id}')
     return group_id[0]
 
 
-def create_trip(group_id, user_id, departure, transport_type, interim_point=None):
-    record = [group_id, user_id, departure, interim_point, transport_type]
+def create_trip(group_id, chat_id, departure, transport_type, trip_time, interim_point=''):
+    user_id = get_user_id_by_chat_id(chat_id)
+    record = [group_id, user_id, departure, interim_point, transport_type, trip_time]
     insert('trips', record)
 
 
@@ -63,6 +65,11 @@ def get_chat_id_by_username(username):
     return chat_id[0][0]
 
 
+def get_user_id_by_chat_id(chat_id):
+    user_id = select(f'select id from users where chat_id = "{chat_id}"')
+    return user_id[0][0]
+
+
 def user_exist(username):
     usernames = select(f'select * from users where username = "{username}"')
     if len(usernames) == 0:
@@ -72,8 +79,8 @@ def user_exist(username):
 
 
 def check_user_in_group(group_id, username) -> bool:
-    user = select(f'select * from trips tr join users u on tr.user_id = u.chat_id where group_id = {group_id} and '
-                  f'username = "{username}"')
+    user_id = get_user_id_by_chat_id(get_chat_id_by_username(username))
+    user = select(f'select * from trips where group_id = {group_id} and user_id = {user_id}')
     if len(user):
         return True
     else:
@@ -86,3 +93,36 @@ def check_group_by_id(id):
         return True
     else:
         return False
+
+
+def get_arrival_coordinates(group_id):
+    coordinates = select(f'select latitude, longitude from groups where id = {group_id}')
+    return coordinates[0]
+
+
+def get_group_data(group_id):
+    group_data = select(f'select destination, meet_time from groups where id = {group_id}')
+    return group_data[0]
+
+
+def get_user_groups(chat_id):
+    user_id = get_user_id_by_chat_id(chat_id)
+    data = select(f'select group_id, departure, trip_time from trips where user_id = {user_id}')
+    result = []
+    for item in data:
+        group_data = get_group_data(item[0])
+        result += [item + group_data]
+    print(result)
+    return result
+
+
+def is_noticed(group_id, chat_id) -> bool:
+    user_id = get_user_id_by_chat_id(chat_id)
+    status = select(f'select is_noticed from trips where group_id = {group_id} and user_id = {user_id}')
+    return status[0][0]
+
+
+def set_noticed(group_id, chat_id):
+    user_id = get_user_id_by_chat_id(chat_id)
+    cursor.execute(f'update trips set is_noticed = 1 where group_id = {group_id} and user_id = {user_id}')
+    connect.commit()
