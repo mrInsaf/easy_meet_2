@@ -37,6 +37,7 @@ def get_data_by_coordinates(departure: tuple, arrive: tuple, mode: str = "test")
         return 1319, 111287
     url = f'https://routing.api.2gis.com/get_dist_matrix?key={GEO_API_KEY}&version=2.0'
     headers = {'Content-type': 'application/json'}
+    print(departure, arrive)
     data = {
         "points": [
             {
@@ -50,11 +51,15 @@ def get_data_by_coordinates(departure: tuple, arrive: tuple, mode: str = "test")
         ],
         "sources": [0],
         "targets": [1],
-        "type": mode,
+        "type": 'jam',
+        "mode": mode
     }
+    print(data)
     request = requests.post(url, data=json.dumps(data), headers=headers)
+    print(request)
     try:
         data = request.json()
+        print(data)
         return data["routes"][0]["duration"], data["routes"][0]["distance"]
     except Exception as ex:
         logger.warning(ex)

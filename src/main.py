@@ -19,6 +19,7 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from asyncio import sleep
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.dispatcher.filters import Text
 
 
 class CreateGroupState(StatesGroup):
@@ -60,6 +61,24 @@ def create_navigation_keyboard():
     back_button = types.InlineKeyboardButton("Назад", callback_data="back")
     home_button = types.InlineKeyboardButton("На главную", callback_data="home")
     return [back_button, home_button]
+
+
+# You can use state '*' if you need to handle all states
+@dp.message_handler(state='*', commands='cancel')
+@dp.message_handler(Text(equals='cancel', ignore_case=True), state='*')
+async def cancel_handler(message: types.Message, state: FSMContext):
+    """
+    Allow user to cancel any action
+    """
+    current_state = await state.get_state()
+    if current_state is None:
+        return
+
+    logging.info('Cancelling state %r', current_state)
+    # Cancel state and inform user about it
+    await state.finish()
+    # And remove keyboard (just in case)
+    await message.reply('Состояние сброшено', reply_markup=types.ReplyKeyboardRemove())
 
 
 @dp.message_handler(commands=["start"])
@@ -137,16 +156,17 @@ async def ask_to_add_user_to_group(message: Message, state: FSMContext):
         if not db_real.check_user_in_group(group_id, message.from_user.username):
             owner_id = db_real.select(f'select owner_id from groups where id = {group_id}')[0][0]
             await state.update_data(invitor=owner_id)
-            await bot.send_message(message.from_user.id,
-                                   f'Отправил запрос на вступление в мероприятие {group_id}')
-            keyboard = types.InlineKeyboardMarkup()
-            accept = types.InlineKeyboardButton(text='Принять', callback_data="user accept join to group")
-            decline = types.InlineKeyboardButton(text='Отказаться', callback_data="user decline join to group")
-            keyboard.add(accept, decline)
-            await bot.send_message(owner_id,
-                                   f"Пользователь {message.from_user.username} хочет вступить в группу {group_id}",
-                                   reply_markup=keyboard)
-            await CreateTripState.group_id.set()
+            # await bot.send_message(message.from_user.id,
+            #                        f'Отправил запрос на вступление в мероприятие {group_id}')
+            # keyboard = types.InlineKeyboardMarkup()
+            # accept = types.InlineKeyboardButton(text='Принять', callback_data="user accept join to group")
+            # decline = types.InlineKeyboardButton(text='Отказаться', callback_data="user decline join to group")
+            # keyboard.add(accept, decline)
+            # await bot.send_message(owner_id,
+            #                        f"Пользователь {message.from_user.username} хочет вступить в группу {group_id}",
+            #                        reply_markup=keyboard)
+            await state.update_data(group_id=group_id)
+            await create_trip(message.from_user.id)
         else:
             await bot.send_message(message.from_user.id,
                                    f'Вы уже состоите в мероприятии {group_id}')
@@ -285,10 +305,10 @@ async def add_departure(message: types.Message, state: FSMContext):
         await message.reply("Ты что-то ввёл не так(")
 
 
-@dp.callback_query_handler(state=CreateTripState.group_id)
-async def join_trip(callback: types.CallbackQuery, state: FSMContext):
-    if callback.data == 'user accept join to group':
-        await bot.send_message(chat_id=callback.from_user.id, text='Вы приняли ')
+# @dp.callback_query_handler(state=CreateTripState.group_id)
+# async def join_trip(callback: types.CallbackQuery, state: FSMContext):
+#     if callback.data == 'user accept join to group':
+#         await bot.send_message(chat_id=callback.from_user.id, text='Вы приняли ')
 
 
 @dp.callback_query_handler(
@@ -414,7 +434,7 @@ async def input_transport_type(callback_query: CallbackQuery, state: FSMContext)
     try:
         if callback_query.data == "car":
             await callback_query.answer('Вы выбрали автомобиль')
-            await state.update_data(transport_type='jam')
+            await state.update_data(transport_type='driving')
 
         elif callback_query.data == "public transport":
             await state.update_data(transport_type='taxi')
@@ -432,10 +452,10 @@ async def input_transport_type(callback_query: CallbackQuery, state: FSMContext)
         await bot.send_message(callback_query.from_user.id, f"Ваша поездка затратит {trip_data[0] // 60} минут.")
         db_real.create_trip(data['group_id'], callback_query.from_user.id, data['departure'], data['transport_type'],
                             trip_data[0] // 60)
+        await state.finish()
         await bot.send_message(callback_query.from_user.id, f"Вы присоединились к группе {data['group_id']}!")
         await bot.send_message(data['invitor'],
                                f"Пользователь {callback_query.from_user.username} присоединился к группе {data['group_id']}")
-        await state.finish()
     except Exception as ex:
         logger.warning(ex)
 

@@ -51,7 +51,9 @@ def create_group(date, address, owner_id, lat, long):
 def create_trip(group_id, chat_id, departure, transport_type, trip_time, interim_point=''):
     user_id = get_user_id_by_chat_id(chat_id)
     record = [group_id, user_id, departure, interim_point, transport_type, trip_time]
-    insert('trips', record)
+    query = f"""INSERT INTO trips (group_id, user_id, departure, interim_point, transport_type, trip_time) VALUES ({','.join(['?'] * len(record))});"""
+    cursor.execute(query, record)
+    connect.commit()
 
 
 def create_user(chat_id, username, first_name=None, last_name=None):
