@@ -62,7 +62,6 @@ def create_navigation_keyboard():
     return [back_button, home_button]
 
 
-
 @dp.message_handler(commands=["start"])
 async def start_command(message: types.Message, state: FSMContext):
     try:
@@ -155,28 +154,33 @@ async def ask_to_add_user_to_group(message: Message, state: FSMContext):
 
 @dp.message_handler(commands=["notice_me"])
 async def notice_me(message: types.Message):
-    group_id = message.text.split()[1]
-    if not db_real.check_group_by_id(group_id):
-        await message.reply('Группы с таким ID нет, попробуйте еще раз')
-        return
-    if not db_real.check_user_in_group(group_id, message.from_user.username):
-        await message.reply('Вы не состоите в этой группе')
-        return
+    try:
+        group_id = message.text.split()[1]
+        delay_time = int(message.text.split()[2])
+        if not db_real.check_group_by_id(group_id):
+            await message.reply('Группы с таким ID нет, попробуйте еще раз')
+            return
+        if not db_real.check_user_in_group(group_id, message.from_user.username):
+            await message.reply('Вы не состоите в этой группе')
+            return
 
-    if db_real.is_noticed(group_id, message.from_user.id):
-        await message.reply('Я помню про тебя')
-        return
+        if db_real.is_noticed(group_id, message.from_user.id):
+            await message.reply('Я помню про тебя')
+            return
 
-    await message.answer("Я предупрежу вас о выходе")
-    db_real.set_noticed(group_id, message.from_user.id)
+        await message.answer("Я предупрежу вас о выходе")
+        db_real.set_noticed(group_id, message.from_user.id)
 
-    meet_address, meet_time = db_real.get_group_data(group_id)
-    now = datetime.datetime.now()
-    datetime_object = datetime.datetime.strptime(meet_time, '%Y-%m-%d %H:%M:%S')
-    result = datetime_object - now
+        meet_address, meet_time = db_real.get_group_data(group_id)
+        now = datetime.datetime.now()
+        datetime_object = datetime.datetime.strptime(meet_time, '%Y-%m-%d %H:%M:%S')
+        result = datetime_object - now
 
-    await sleep(result.total_seconds())
-    await bot.send_message(message.from_user.id, f"Вам пора на встречу {group_id}. По адресу: {meet_address}.")
+        await sleep(result.total_seconds() - delay_time * 60)
+        await bot.send_message(message.from_user.id, f"Вам пора на встречу {group_id}. По адресу: {meet_address}.")
+    except Exception as ex:
+        logger.warning(ex)
+        await bot.send_message(message.from_user.id, "Что-то пошло не так.")
 
 
 @dp.message_handler(commands=["get_group_info"])
@@ -363,9 +367,6 @@ async def input_address(message: Message, state: FSMContext):
     await state.update_data(longitude=address_coordinates[1])
     await CreateGroupState.db_push.set()
 
-
-@dp.message_handler(state=CreateGroupState.db_push)
-async def db_push(message: Message, state: FSMContext):
     data = await state.get_data()
     datetime_obj = datetime.datetime.combine(data['date'], data['time'])
     group_id = db_real.create_group(datetime_obj, data['address'], message.from_user.id, data['latitude'],
@@ -426,7 +427,8 @@ async def input_transport_type(callback_query: CallbackQuery, state: FSMContext)
         await bot.send_message(callback_query.from_user.id, 'Рассчитываю время поездки')
         print('data is:', data)
         arrival = db_real.get_arrival_coordinates(data['group_id'])
-        trip_data = get_data_by_coordinates(arrival, data['departure_coord'], data['transport_type'])  # data['transport_type']
+        trip_data = get_data_by_coordinates(arrival, data['departure_coord'],
+                                            data['transport_type'])  # data['transport_type']
         await bot.send_message(callback_query.from_user.id, f"Ваша поездка затратит {trip_data[0] // 60} минут.")
         db_real.create_trip(data['group_id'], callback_query.from_user.id, data['departure'], data['transport_type'],
                             trip_data[0] // 60)
