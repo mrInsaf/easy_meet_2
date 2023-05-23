@@ -9,7 +9,7 @@ FORMAT = '%(asctime)s - [%(levelname)s] -  %(name)s - (%(filename)s).%(funcName)
 logging.basicConfig(format=FORMAT)
 logger = logging.getLogger(__name__)
 
-GEO_API_KEY = "ed7c0fbb-cd58-48b1-b23c-c44f91d321df"
+GEO_API_KEY = "d6f6e475-5804-4aeb-af8a-076ce5fa06ca"
 
 
 def get_map_by_coordinates(latitude: float, longitude: float):
@@ -39,7 +39,7 @@ def get_data_by_coordinates(departure: tuple, arrive: tuple, mode: str = "test")
     headers = {'Content-type': 'application/json'}
     print(departure, arrive)
     data = {
-        "points": [
+         "points": [
             {
                 "lat": departure[0],
                 "lon": departure[1]
