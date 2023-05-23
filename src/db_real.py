@@ -132,3 +132,8 @@ def set_noticed(group_id, chat_id):
     user_id = get_user_id_by_chat_id(chat_id)
     cursor.execute(f'update trips set is_noticed = 1 where group_id = {group_id} and user_id = {user_id}')
     connect.commit()
+
+def check_access(group_id):
+    password = select(f'select password from groups where id = {group_id}')
+    return password[0][0]
+

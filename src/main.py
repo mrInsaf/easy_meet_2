@@ -39,6 +39,7 @@ class StartState(StatesGroup):
 
 class CreateTripState(StatesGroup):
     invitor = State()
+    password = State()
     group_id = State()
     departure = State()
     transport_type = State()
@@ -95,7 +96,7 @@ async def start_command(message: types.Message, state: FSMContext):
         logger.warning(ex)
     finally:
         await bot.send_message(message.from_user.id,
-            f"Привет, {message.from_user.first_name}, я EasyMeet.\nПопробуй команду /help чтобы посмотреть на что я способен. \n\n И не забудь включить уведомления")
+                               f"Привет, {message.from_user.first_name}, я EasyMeet.\nПопробуй команду /help чтобы посмотреть на что я способен. \n\n И не забудь включить уведомления")
 
     kb = InlineKeyboardMarkup()
     buttons = [InlineKeyboardButton(text='Создать встречу', callback_data='create_group'),
@@ -161,21 +162,27 @@ async def ask_to_add_user_to_group(message: Message, state: FSMContext):
         if not db_real.check_user_in_group(group_id, message.from_user.username):
             owner_id = db_real.select(f'select owner_id from groups where id = {group_id}')[0][0]
             await state.update_data(invitor=owner_id)
-            # await bot.send_message(message.from_user.id,
-            #                        f'Отправил запрос на вступление в мероприятие {group_id}')
-            # keyboard = types.InlineKeyboardMarkup()
-            # accept = types.InlineKeyboardButton(text='Принять', callback_data="user accept join to group")
-            # decline = types.InlineKeyboardButton(text='Отказаться', callback_data="user decline join to group")
-            # keyboard.add(accept, decline)
-            # await bot.send_message(owner_id,
-            #                        f"Пользователь {message.from_user.username} хочет вступить в группу {group_id}",
-            #                        reply_markup=keyboard)
             await state.update_data(group_id=group_id)
-            await create_trip(message.from_user.id)
+            password = db_real.check_access(group_id)
+            await state.update_data(password=password)
+            if password is not None:
+                await bot.send_message(message.from_user.id, 'Введите пароль для данной встречи')
+                await CreateTripState.password.set()
+            else:
+                await create_trip(message.from_user.id)
         else:
             await bot.send_message(message.from_user.id,
                                    f'Вы уже состоите в мероприятии {group_id}')
 
+
+@dp.message_handler(state=CreateTripState.password)
+async def input_password(message: Message, state: FSMContext):
+    data = await state.get_data()
+    pw = data['password']
+    if message.text == pw:
+        await create_trip(message.from_user.id)
+    else:
+        await message.reply('Неправильный пароль, попробуйте еще раз')
 
 
 @dp.message_handler(commands=["notice_me"])
@@ -406,7 +413,6 @@ async def input_address(message: Message, state: FSMContext):
 
 @dp.callback_query_handler(state=CreateGroupState.access)
 async def process_access(callback=CallbackQuery, state=FSMContext):
-
     if callback.data == 'public':
         await state.update_data(access='public')
         await CreateGroupState.password.set()
@@ -437,6 +443,7 @@ async def input_password(message: Message, state: FSMContext):
     await CreateTripState.group_id.set()
     await state.update_data(group_id=group_id)
     await create_trip(data["owner_id"])
+
 
 async def create_trip(user_id):
     await bot.send_message(user_id, 'Введите адрес отправления')
@@ -497,12 +504,13 @@ async def input_transport_type(callback_query: CallbackQuery, state: FSMContext)
                                                                          'напомнить Вам о поездке')
         try:
             await bot.send_message(data['invitor'],
-                               f"Пользователь {callback_query.from_user.username} присоединился к группе {data['group_id']}")
+                                   f"Пользователь {callback_query.from_user.username} присоединился к группе {data['group_id']}")
         except Exception as ex:
             logger.warning(ex)
 
     except Exception as ex:
         logger.warning(ex)
+
 
 @dp.message_handler(state=CreateTripState.delay)
 async def input_transport_type(message: Message, state: FSMContext):
@@ -524,6 +532,7 @@ async def input_transport_type(message: Message, state: FSMContext):
     except Exception as ex:
         logger.warning(ex)
         await message.answer('Неправильный ввод, попробуйте еще раз')
+
 
 if __name__ == "__main__":
     executor.start_polling(dp)
