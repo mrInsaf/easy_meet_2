@@ -87,6 +87,14 @@ async def cancel_handler(message: types.Message, state: FSMContext):
     await start_command(message, state)
 
 
+async def send_group_data(user_id, group_id):
+    group_data = db_real.get_group_data(group_id)
+    await bot.send_message(chat_id=user_id,
+                           text=f'Информация о поездке:\n'
+                                f'Место назначения: {group_data[0]}\n'
+                                f'Дата и время: {group_data[1]}\n')
+
+
 @dp.message_handler(commands=["start"])
 async def start_command(message: types.Message, state: FSMContext):
     try:
@@ -169,6 +177,7 @@ async def ask_to_add_user_to_group(message: Message, state: FSMContext):
                 await bot.send_message(message.from_user.id, 'Введите пароль для данной встречи')
                 await CreateTripState.password.set()
             else:
+                await send_group_data(message.from_user.id, group_id)
                 await create_trip(message.from_user.id)
         else:
             await bot.send_message(message.from_user.id,
@@ -180,6 +189,7 @@ async def input_password(message: Message, state: FSMContext):
     data = await state.get_data()
     pw = data['password']
     if message.text == pw:
+        await send_group_data(message.from_user.id, data['group_id'])
         await create_trip(message.from_user.id)
     else:
         await message.reply('Неправильный пароль, попробуйте еще раз')
