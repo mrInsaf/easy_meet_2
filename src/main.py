@@ -83,6 +83,7 @@ async def cancel_handler(message: types.Message, state: FSMContext):
     await state.finish()
     # And remove keyboard (just in case)
     await message.reply('Состояние сброшено', reply_markup=types.ReplyKeyboardRemove())
+    await start_command(message, state)
 
 
 @dp.message_handler(commands=["start"])
@@ -93,7 +94,7 @@ async def start_command(message: types.Message, state: FSMContext):
     except Exception as ex:
         logger.warning(ex)
     finally:
-        await message.reply(
+        await bot.send_message(message.from_user.id,
             f"Привет, {message.from_user.first_name}, я EasyMeet.\nПопробуй команду /help чтобы посмотреть на что я способен. \n\n И не забудь включить уведомления")
 
     kb = InlineKeyboardMarkup()
@@ -130,7 +131,7 @@ async def start_processing(callback: types.CallbackQuery, state: FSMContext):
         await bot.send_message(chat_id=callback.from_user.id, text='Введите ID группы: ')
 
 
-@dp.message_handler(commands=["help"])
+@dp.message_handler(state='*', commands='help')
 async def help_command(message: types.Message):
     help_data = "/create_group [дата] [время] [адрес] - создать группу поездки. Бот вернёт id группы\n" \
                 "/change_group_date [дата] - изменить дату встречи\n" \
