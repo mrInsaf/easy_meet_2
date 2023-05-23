@@ -23,10 +23,13 @@ from aiogram.dispatcher.filters import Text
 
 
 class CreateGroupState(StatesGroup):
+    owner_id = State()
     date = State()
     time = State()
     address = State()
     coordinates = State()
+    access = State()
+    password = State()
     db_push = State()
 
 
@@ -39,6 +42,7 @@ class CreateTripState(StatesGroup):
     group_id = State()
     departure = State()
     transport_type = State()
+    delay = State()
 
 
 class AddUserState(StatesGroup):
@@ -90,7 +94,7 @@ async def start_command(message: types.Message, state: FSMContext):
         logger.warning(ex)
     finally:
         await message.reply(
-            f"Привет, {message.from_user.first_name}, я EasyMeet.\nПопробуй команду /help чтобы посмотреть на что я способен.")
+            f"Привет, {message.from_user.first_name}, я EasyMeet.\nПопробуй команду /help чтобы посмотреть на что я способен. \n\n И не забудь включить уведомления")
 
     kb = InlineKeyboardMarkup()
     buttons = [InlineKeyboardButton(text='Создать встречу', callback_data='create_group'),
@@ -101,7 +105,7 @@ async def start_command(message: types.Message, state: FSMContext):
     if len(your_groups):
         buttons.append(InlineKeyboardButton(text='Пригласить на встречу', callback_data='invite_user'))
     kb.add(*buttons)
-    await message.reply(text='Выберите желаемое действие', reply_markup=kb)
+    await bot.send_message(chat_id=message.from_user.id, text='Выберите желаемое действие', reply_markup=kb)
     await StartState.start_menu.set()
 
 
@@ -172,6 +176,7 @@ async def ask_to_add_user_to_group(message: Message, state: FSMContext):
                                    f'Вы уже состоите в мероприятии {group_id}')
 
 
+
 @dp.message_handler(commands=["notice_me"])
 async def notice_me(message: types.Message):
     try:
@@ -189,14 +194,16 @@ async def notice_me(message: types.Message):
             return
 
         await message.answer("Я предупрежу вас о выходе")
-        db_real.set_noticed(group_id, message.from_user.id)
+        # db_real.set_noticed(group_id, message.from_user.id)
 
         meet_address, meet_time = db_real.get_group_data(group_id)
+        user_id = db_real.get_user_id_by_chat_id(message.from_user.id)
+        trip_time = int(db_real.get_trip_data(group_id, user_id))
         now = datetime.datetime.now()
         datetime_object = datetime.datetime.strptime(meet_time, '%Y-%m-%d %H:%M:%S')
         result = datetime_object - now
 
-        await sleep(result.total_seconds() - delay_time * 60)
+        await sleep(result.total_seconds() - delay_time * 60 - trip_time * 60)
         await bot.send_message(message.from_user.id, f"Вам пора на встречу {group_id}. По адресу: {meet_address}.")
     except Exception as ex:
         logger.warning(ex)
@@ -344,6 +351,7 @@ async def input_date(message: Message):
 
 @dp.callback_query_handler(simple_cal_callback.filter(), state=CreateGroupState.date)
 async def process_input_date(callback_query: CallbackQuery, callback_data: dict, state: FSMContext):
+    await state.update_data(owner_id=callback_query.from_user.id)
     selected, date = await SimpleCalendar().process_selection(callback_query, callback_data)
     if selected:
         await callback_query.message.answer(
@@ -381,23 +389,53 @@ async def input_address(message: Message, state: FSMContext):
         await state.update_data(address=message.text)
         map = get_map_by_coordinates(address_coordinates[0], address_coordinates[1])
         if map:
-            await message.answer('Вы выбрали следующий адресс')
+            await message.answer('Вы выбрали следующий адрес')
             await message.answer_photo(photo=map)
     await state.update_data(latitude=address_coordinates[0])
     await state.update_data(longitude=address_coordinates[1])
-    await CreateGroupState.db_push.set()
+    await CreateGroupState.access.set()
 
+    kb = InlineKeyboardMarkup()
+    private_key = InlineKeyboardButton(text='Закрытый', callback_data='private')
+    public_key = InlineKeyboardButton(text='Открытый', callback_data='public')
+    kb.add(private_key, public_key)
+
+    await bot.send_message(message.from_user.id, 'Выберите тип доступа к поездке', reply_markup=kb)
+
+
+@dp.callback_query_handler(state=CreateGroupState.access)
+async def process_access(callback=CallbackQuery, state=FSMContext):
+
+    if callback.data == 'public':
+        await state.update_data(access='public')
+        await CreateGroupState.password.set()
+        await state.update_data(password=None)
+        await input_password(callback.message, state)
+
+    elif callback.data == 'private':
+        await state.update_data(access='private')
+        await bot.send_message(callback.from_user.id, 'Введите пароль для этой встречи')
+        await CreateGroupState.password.set()
+
+
+@dp.message_handler(state=CreateGroupState.password)
+async def input_password(message: Message, state: FSMContext):
     data = await state.get_data()
+    if data['access'] == 'private':
+        await state.update_data(password=message.text)
+        await message.reply('Пароль сохранен')
+        data = await state.get_data()
+
+    await CreateGroupState.db_push.set()
     datetime_obj = datetime.datetime.combine(data['date'], data['time'])
-    group_id = db_real.create_group(datetime_obj, data['address'], message.from_user.id, data['latitude'],
-                                    data['longitude'])
+    group_id = db_real.create_group(datetime_obj, data['address'], data["owner_id"], data['latitude'],
+                                    data['longitude'], data['password'])
     await state.update_data(db_push=group_id)
-    await message.reply(f'ID вашей встречи: {group_id}')
+    await bot.send_message(chat_id=data["owner_id"], text=f'Готово! ID вашей встречи: {group_id}')
     await state.finish()
     await CreateTripState.group_id.set()
     await state.update_data(group_id=group_id)
-    await create_trip(message.from_user.id)
-
+    await create_trip(data["owner_id"])
 
 async def create_trip(user_id):
     await bot.send_message(user_id, 'Введите адрес отправления')
@@ -452,13 +490,39 @@ async def input_transport_type(callback_query: CallbackQuery, state: FSMContext)
         await bot.send_message(callback_query.from_user.id, f"Ваша поездка затратит {trip_data[0] // 60} минут.")
         db_real.create_trip(data['group_id'], callback_query.from_user.id, data['departure'], data['transport_type'],
                             trip_data[0] // 60)
-        await state.finish()
         await bot.send_message(callback_query.from_user.id, f"Вы присоединились к группе {data['group_id']}!")
-        await bot.send_message(data['invitor'],
+        await CreateTripState.delay.set()
+        await bot.send_message(chat_id=callback_query.from_user.id, text='Введите количество минут, за которое нужно '
+                                                                         'напомнить Вам о поездке')
+        try:
+            await bot.send_message(data['invitor'],
                                f"Пользователь {callback_query.from_user.username} присоединился к группе {data['group_id']}")
+        except Exception as ex:
+            logger.warning(ex)
+
     except Exception as ex:
         logger.warning(ex)
 
+@dp.message_handler(state=CreateTripState.delay)
+async def input_transport_type(message: Message, state: FSMContext):
+    try:
+        delay_time = int(message.text)
+        data = await state.get_data()
+        await message.answer("Я предупрежу вас о выходе")
+        # db_real.set_noticed(group_id, message.from_user.id)
+        group_id = data['group_id']
+        meet_address, meet_time = db_real.get_group_data(group_id)
+        user_id = db_real.get_user_id_by_chat_id(message.from_user.id)
+        trip_time = int(db_real.get_trip_data(group_id, user_id))
+        now = datetime.datetime.now()
+        datetime_object = datetime.datetime.strptime(meet_time, '%Y-%m-%d %H:%M:%S')
+        result = datetime_object - now
+        await state.finish()
+        await sleep(result.total_seconds() - delay_time * 60 - trip_time * 60)
+        await bot.send_message(message.from_user.id, f"Вам пора на встречу {group_id}. По адресу: {meet_address}.")
+    except Exception as ex:
+        logger.warning(ex)
+        await message.answer('Неправильный ввод, попробуйте еще раз')
 
 if __name__ == "__main__":
     executor.start_polling(dp)

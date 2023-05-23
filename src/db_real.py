@@ -38,10 +38,10 @@ def insert(table_name, record):
     connect.commit()
 
 
-def create_group(date, address, owner_id, lat, long):
+def create_group(date, address, owner_id, lat, long, password):
     # datetime_str = date + ' ' + time
     # record = [address, datetime_str]
-    record = [address, date, owner_id, lat, long]
+    record = [address, date, owner_id, lat, long, password]
     insert('groups', record)
     group_id = select(
         f'select id from groups where destination = "{address}" and meet_time = "{date}" and owner_id = {owner_id}')
@@ -105,6 +105,10 @@ def get_arrival_coordinates(group_id):
 def get_group_data(group_id):
     group_data = select(f'select destination, meet_time from groups where id = {group_id}')
     return group_data[0]
+
+def get_trip_data(group_id, user_id):
+    trip_data = select(f'select trip_time from trips where group_id = {group_id} and user_id = {user_id}')
+    return trip_data[0][0]
 
 
 def get_user_groups(chat_id):

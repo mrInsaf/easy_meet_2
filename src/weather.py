@@ -6,7 +6,7 @@ FORMAT = '%(asctime)s - [%(levelname)s] -  %(name)s - (%(filename)s).%(funcName)
 logging.basicConfig(format=FORMAT)
 logger = logging.getLogger(__name__)
 
-API_KEY = os.getenv("WEATHER_API_KEY")
+API_KEY = 'f362eec34c7a040a9b7c0d9e75e39f2b'
 
 
 def get_weather_by_coordinates(coordinates):
