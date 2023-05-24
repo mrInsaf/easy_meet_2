@@ -57,8 +57,7 @@ FORMAT = '%(asctime)s - [%(levelname)s] -  %(name)s - (%(filename)s).%(funcName)
 logging.basicConfig(format=FORMAT)
 logger = logging.getLogger(__name__)
 
-# TOKEN = '5855851155:AAHTBjBysCgf6fvrEnaZxnong1oTpIQVJiU'
-TOKEN = '5664884797:AAFhsq5D3eWHx9BTH6l078WslK11swOXgL4'
+TOKEN = '5855851155:AAHTBjBysCgf6fvrEnaZxnong1oTpIQVJiU'
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot, storage=storage)
 
