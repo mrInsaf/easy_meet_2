@@ -137,3 +137,8 @@ def check_access(group_id):
     password = select(f'select password from groups where id = {group_id}')
     return password[0][0]
 
+
+def get_coordinates_by_group(group_id):
+    coordinates = select(f'select latitude, longitude from groups where id = {group_id}')
+    return coordinates[0]
+

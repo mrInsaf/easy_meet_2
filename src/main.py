@@ -7,6 +7,8 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQu
 from aiogram.utils.callback_data import CallbackData
 import asyncio
 import logging
+
+import weather
 from geo_api import get_coordinates_by_address, get_data_by_coordinates, get_map_by_coordinates
 import db_real
 from weather import get_weather_by_coordinates
@@ -20,6 +22,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from asyncio import sleep
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.dispatcher.filters import Text
+
 
 
 class CreateGroupState(StatesGroup):
@@ -104,7 +107,7 @@ async def start_command(message: types.Message, state: FSMContext):
         logger.warning(ex)
     finally:
         await bot.send_message(message.from_user.id,
-                               f"Что умеет этот бот?  \r\n \r\n👋Привет, {message.from_user.first_name}!  \r\n \r\n🤖Я – бот по организации встреч «Easymeet». С моей помощью ты сможешь:  \r\n \r\n🤝Создать или присоединиться к встрече с конкретной датой и временем  \r\n⏱Рассчитать время на сборы и дорогу с учетом средства передвижения \r\n⏳Получать напоминания о необходимости выходить \r\n🌍Узнать прогноз погоды в месте встречи  \r\n\n ❗️ В любой момент можно нажать /help, чтобы получить помощь\n ")
+                               f"Что умеет этот бот?  \r\n \r\n👋Привет, {message.from_user.first_name}!  \r\n \r\n🤖Я – бот по организации встреч «Easymeet». С моей помощью ты сможешь:  \r\n \r\n🤝Создать или присоединиться к встрече с конкретной датой и временем  \r\n⏱Рассчитать время на сборы и дорогу с учетом средства передвижения \r\n⏳Получать напоминания о необходимости выходить \r\n🌍Узнать прогноз погоды в месте встречи  \r\n\n❗️В любой момент можно нажать /help, чтобы получить помощь\n ")
 
     kb = InlineKeyboardMarkup()
     buttons = [InlineKeyboardButton(text='⬆️ Создать встречу', callback_data='create_group'),
@@ -533,10 +536,18 @@ async def input_transport_type(callback_query: CallbackQuery, state: FSMContext)
 async def input_transport_type(message: Message, state: FSMContext):
     try:
         delay_time = int(message.text)
+
         data = await state.get_data()
-        await message.answer("👌 Я предупрежу вас о выходе")
-        # db_real.set_noticed(group_id, message.from_user.id)
         group_id = data['group_id']
+
+        await message.answer("👌 Я предупрежу вас о выходе")
+
+        coordinates = db_real.get_coordinates_by_group(group_id)
+        destination_weather = weather.get_weather_by_coordinates(coordinates)
+        await bot.send_message(message.from_user.id, f"Погода в точке назначения")
+        await bot.send_message(message.from_user.id, destination_weather)
+
+        # db_real.set_noticed(group_id, message.from_user.id)
         meet_address, meet_time = db_real.get_group_data(group_id)
         user_id = db_real.get_user_id_by_chat_id(message.from_user.id)
         trip_time = int(db_real.get_trip_data(group_id, user_id))
