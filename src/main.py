@@ -57,7 +57,7 @@ FORMAT = '%(asctime)s - [%(levelname)s] -  %(name)s - (%(filename)s).%(funcName)
 logging.basicConfig(format=FORMAT)
 logger = logging.getLogger(__name__)
 
-TOKEN = '6234694339:AAFV3O4emFYQmIxD307xvDw9Kde5rpb8OH0'
+TOKEN = '5855851155:AAHTBjBysCgf6fvrEnaZxnong1oTpIQVJiU'
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot, storage=storage)
 
@@ -90,9 +90,9 @@ async def cancel_handler(message: types.Message, state: FSMContext):
 async def send_group_data(user_id, group_id):
     group_data = db_real.get_group_data(group_id)
     await bot.send_message(chat_id=user_id,
-                           text=f'Информация о поездке:\n'
-                                f'Место назначения: {group_data[0]}\n'
-                                f'Дата и время: {group_data[1]}\n')
+                           text=f'ℹ️ Информация о поездке:\n\n'
+                                f'🌍 Место назначения: {group_data[0]}\n'
+                                f'🕐 Дата и время встречи: {group_data[1]}\n')
 
 
 @dp.message_handler(commands=["start"])
@@ -104,16 +104,16 @@ async def start_command(message: types.Message, state: FSMContext):
         logger.warning(ex)
     finally:
         await bot.send_message(message.from_user.id,
-                               f"Привет, {message.from_user.first_name}, я EasyMeet.\nПопробуй команду /help чтобы посмотреть на что я способен. \n\n И не забудь включить уведомления")
+                               f"Что умеет этот бот?  \r\n \r\n👋Привет, {message.from_user.first_name}!  \r\n \r\n🤖Я – бот по организации встреч «Easymeet». С моей помощью ты сможешь:  \r\n \r\n🤝Создать или присоединиться к встрече с конкретной датой и временем  \r\n⏱Рассчитать время на сборы и дорогу с учетом средства передвижения \r\n⏳Получать напоминания о необходимости выходить \r\n🌍Узнать прогноз погоды в месте встречи  \r\n ")
 
     kb = InlineKeyboardMarkup()
-    buttons = [InlineKeyboardButton(text='Создать встречу', callback_data='create_group'),
-               InlineKeyboardButton(text='Присоединиться к встрече', callback_data='join_group')]
+    buttons = [InlineKeyboardButton(text='⬆️ Создать встречу', callback_data='create_group'),
+               InlineKeyboardButton(text='↗️ Присоединиться к встрече', callback_data='join_group')]
 
     your_groups = db_real.select(
         f'select * from groups where owner_id = {message.from_user.id} and meet_time >= date()')
-    if len(your_groups):
-        buttons.append(InlineKeyboardButton(text='Пригласить на встречу', callback_data='invite_user'))
+    # if len(your_groups):
+    #     buttons.append(InlineKeyboardButton(text='Пригласить на встречу', callback_data='invite_user'))
     kb.add(*buttons)
     await bot.send_message(chat_id=message.from_user.id, text='Выберите желаемое действие', reply_markup=kb)
     await StartState.start_menu.set()
@@ -174,7 +174,7 @@ async def ask_to_add_user_to_group(message: Message, state: FSMContext):
             password = db_real.check_access(group_id)
             await state.update_data(password=password)
             if password is not None:
-                await bot.send_message(message.from_user.id, 'Введите пароль для данной встречи')
+                await bot.send_message(message.from_user.id, '🚧 Введите пароль для данной встречи')
                 await CreateTripState.password.set()
             else:
                 await send_group_data(message.from_user.id, group_id)
@@ -363,7 +363,7 @@ async def trip_callback(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.message_handler(commands=["create_group"])
 async def input_date(message: Message):
-    await message.answer("Выберите дату мероприятия: ", reply_markup=await SimpleCalendar().start_calendar())
+    await message.answer("🗓 Выберите дату мероприятия: ", reply_markup=await SimpleCalendar().start_calendar())
     await CreateGroupState.date.set()
 
 
@@ -377,7 +377,7 @@ async def process_input_date(callback_query: CallbackQuery, callback_data: dict,
         )
         await state.update_data(date=date.date())
         await CreateGroupState.next()
-        await callback_query.message.answer("Выберите время поездки: ")
+        await callback_query.message.answer("🕐 Выберите время поездки: ")
         data = await state.get_data()
 
 
@@ -389,7 +389,7 @@ async def input_time(message: Message, state: FSMContext):
         await message.answer(f'Вы ввели время: {message.text}')
         await state.update_data(time=time.time())
         await CreateGroupState.next()
-        await bot.send_message(chat_id=message.from_user.id, text='Введите адрес поездки: ')
+        await bot.send_message(chat_id=message.from_user.id, text='🏡 Введите адрес поездки: ')
     except Exception as ex:
         logger.warning(ex)
         await message.answer(f'Вы ввели неправильное время')
@@ -414,8 +414,8 @@ async def input_address(message: Message, state: FSMContext):
     await CreateGroupState.access.set()
 
     kb = InlineKeyboardMarkup()
-    private_key = InlineKeyboardButton(text='Закрытый', callback_data='private')
-    public_key = InlineKeyboardButton(text='Открытый', callback_data='public')
+    private_key = InlineKeyboardButton(text='🚧 Закрытый', callback_data='private')
+    public_key = InlineKeyboardButton(text='😁 Открытый', callback_data='public')
     kb.add(private_key, public_key)
 
     await bot.send_message(message.from_user.id, 'Выберите тип доступа к поездке', reply_markup=kb)
@@ -431,7 +431,7 @@ async def process_access(callback=CallbackQuery, state=FSMContext):
 
     elif callback.data == 'private':
         await state.update_data(access='private')
-        await bot.send_message(callback.from_user.id, 'Введите пароль для этой встречи')
+        await bot.send_message(callback.from_user.id, '✏️ Придумайте пароль для этой встречи')
         await CreateGroupState.password.set()
 
 
@@ -476,8 +476,8 @@ async def input_departure(message: Message, state: FSMContext):
 
     await state.update_data(departure=message.text)
     await state.update_data(departure_coord=address_coordinates)
-    car_button = InlineKeyboardButton("Автомобиль", callback_data="car")
-    public_transport_button = InlineKeyboardButton("Общественный транспорт", callback_data="public transport")
+    car_button = InlineKeyboardButton("🚗 Автомобиль", callback_data="car")
+    public_transport_button = InlineKeyboardButton("🚌 Общественный транспорт", callback_data="public transport")
 
     keyboard = InlineKeyboardMarkup().row(car_button, public_transport_button)
 
@@ -500,21 +500,21 @@ async def input_transport_type(callback_query: CallbackQuery, state: FSMContext)
             await callback_query.answer('Я тупой дебил, не понимаю, на какую кнопку вы нажали')
 
         data = await state.get_data()
-        await bot.send_message(callback_query.from_user.id, 'Рассчитываю время поездки')
+        await bot.send_message(callback_query.from_user.id, 'Рассчитываю время поездки...')
         print('data is:', data)
         arrival = db_real.get_arrival_coordinates(data['group_id'])
         trip_data = get_data_by_coordinates(arrival, data['departure_coord'],
                                             data['transport_type'])  # data['transport_type']
-        await bot.send_message(callback_query.from_user.id, f"Ваша поездка затратит {trip_data[0] // 60} минут.")
+        await bot.send_message(callback_query.from_user.id, f"⏳ Ваша поездка затратит {trip_data[0] // 60} минут.")
         db_real.create_trip(data['group_id'], callback_query.from_user.id, data['departure'], data['transport_type'],
                             trip_data[0] // 60)
-        await bot.send_message(callback_query.from_user.id, f"Вы присоединились к группе {data['group_id']}!")
+        await bot.send_message(callback_query.from_user.id, f"🎉 Вы присоединились к группе {data['group_id']}!")
         await CreateTripState.delay.set()
-        await bot.send_message(chat_id=callback_query.from_user.id, text='Введите количество минут, за которое нужно '
+        await bot.send_message(chat_id=callback_query.from_user.id, text='📣 Введите количество минут, за которое нужно '
                                                                          'напомнить Вам о поездке')
         try:
             await bot.send_message(data['invitor'],
-                                   f"Пользователь {callback_query.from_user.username} присоединился к группе {data['group_id']}")
+                                   f"❕ Пользователь {callback_query.from_user.username} присоединился к группе {data['group_id']}")
         except Exception as ex:
             logger.warning(ex)
 
@@ -527,7 +527,7 @@ async def input_transport_type(message: Message, state: FSMContext):
     try:
         delay_time = int(message.text)
         data = await state.get_data()
-        await message.answer("Я предупрежу вас о выходе")
+        await message.answer("👌 Я предупрежу вас о выходе")
         # db_real.set_noticed(group_id, message.from_user.id)
         group_id = data['group_id']
         meet_address, meet_time = db_real.get_group_data(group_id)
@@ -538,7 +538,10 @@ async def input_transport_type(message: Message, state: FSMContext):
         result = datetime_object - now
         await state.finish()
         await sleep(result.total_seconds() - delay_time * 60 - trip_time * 60)
-        await bot.send_message(message.from_user.id, f"Вам пора на встречу {group_id}. По адресу: {meet_address}.")
+        await bot.send_message(message.from_user.id, f"❗️ Вам пора собираться на встречу {group_id}. По адресу: {meet_address}.")
+        await sleep(result.total_seconds() - trip_time * 60)
+        await bot.send_message(message.from_user.id,
+                               f"❗️❗️ Вам пора выезжать на встречу {group_id}. По адресу: {meet_address}.")
     except Exception as ex:
         logger.warning(ex)
         await message.answer('Неправильный ввод, попробуйте еще раз')
