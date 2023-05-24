@@ -57,7 +57,8 @@ FORMAT = '%(asctime)s - [%(levelname)s] -  %(name)s - (%(filename)s).%(funcName)
 logging.basicConfig(format=FORMAT)
 logger = logging.getLogger(__name__)
 
-TOKEN = '5855851155:AAHTBjBysCgf6fvrEnaZxnong1oTpIQVJiU'
+# TOKEN = '5855851155:AAHTBjBysCgf6fvrEnaZxnong1oTpIQVJiU'
+TOKEN = '5664884797:AAFhsq5D3eWHx9BTH6l078WslK11swOXgL4'
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot, storage=storage)
 
@@ -311,10 +312,14 @@ async def get_group_list(message: types.Message):
 async def weather_by_address(message: types.Message):
     try:
         trip_address = ' '.join(message.text.split()[1:])
+        if trip_address.isdigit():
+            trip_address = db_real.get_group_data(trip_address)[0]
+
         address_coordinates = get_coordinates_by_address(trip_address)
         if not address_coordinates:
             raise ValueError("Неправильный адрес")
         weather = get_weather_by_coordinates(address_coordinates)
+        await bot.send_message(message.from_user.id, f"Прогноз погоды по адресу : {trip_address}")
         await bot.send_message(message.from_user.id, weather)
     except Exception as ex:
         logger.warning(ex)
