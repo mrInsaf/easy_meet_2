@@ -543,9 +543,6 @@ async def input_transport_type(message: Message, state: FSMContext):
         await message.answer("👌 Я предупрежу вас о выходе")
 
         coordinates = db_real.get_coordinates_by_group(group_id)
-        destination_weather = weather.get_weather_by_coordinates(coordinates)
-        await bot.send_message(message.from_user.id, f"Погода в точке назначения")
-        await bot.send_message(message.from_user.id, destination_weather)
 
         # db_real.set_noticed(group_id, message.from_user.id)
         meet_address, meet_time = db_real.get_group_data(group_id)
@@ -557,9 +554,18 @@ async def input_transport_type(message: Message, state: FSMContext):
         await state.finish()
         await sleep(result.total_seconds() - delay_time * 60 - trip_time * 60)
         await bot.send_message(message.from_user.id, f"❗️ Вам пора собираться на встречу {group_id}. По адресу: {meet_address}.")
+
+        destination_weather = weather.get_weather_by_coordinates(coordinates)
+        await bot.send_message(message.from_user.id, f"Погода в точке назначения")
+        await bot.send_message(message.from_user.id, destination_weather)
+
         await sleep(result.total_seconds() - trip_time * 60)
         await bot.send_message(message.from_user.id,
                                f"❗️❗️ Вам пора выезжать на встречу {group_id}. По адресу: {meet_address}.")
+        destination_weather = weather.get_weather_by_coordinates(coordinates)
+        await bot.send_message(message.from_user.id, f"Погода в точке назначения")
+        await bot.send_message(message.from_user.id, destination_weather)
+
     except Exception as ex:
         logger.warning(ex)
         await message.answer('Неправильный ввод, попробуйте еще раз')
