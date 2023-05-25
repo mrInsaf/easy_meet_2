@@ -142,3 +142,6 @@ def get_coordinates_by_group(group_id):
     coordinates = select(f'select latitude, longitude from groups where id = {group_id}')
     return coordinates[0]
 
+def add_rating(username, rating, comment):
+    record = [username, rating, comment]
+    insert("ratings", record)

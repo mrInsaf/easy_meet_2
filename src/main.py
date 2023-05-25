@@ -45,6 +45,7 @@ class CreateTripState(StatesGroup):
     password = State()
     group_id = State()
     departure = State()
+    coordinates = State()
     transport_type = State()
     delay = State()
 
@@ -53,6 +54,11 @@ class AddUserState(StatesGroup):
     get_group_id = State()
     get_username = State()
     add_user = State()
+
+
+class RateState(StatesGroup):
+    rating = State()
+    comment = State()
 
 
 storage = MemoryStorage()
@@ -86,8 +92,8 @@ async def cancel_handler(message: types.Message, state: FSMContext):
     # Cancel state and inform user about it
     await state.finish()
     # And remove keyboard (just in case)
-    await message.reply('Состояние сброшено', reply_markup=types.ReplyKeyboardRemove())
-    await start_command(message, state)
+    await bot.send_message(message.from_user.id, '<i>Состояние сброшено</i>\n\n /start\t - Перейти на старт\n /rate\t - Оценить бота\n /help\t - Получить помощь', reply_markup=types.ReplyKeyboardRemove(), parse_mode=types.ParseMode.HTML)
+
 
 
 async def send_group_data(user_id, group_id):
@@ -98,7 +104,7 @@ async def send_group_data(user_id, group_id):
                                 f'🕐 Дата и время встречи: {group_data[1]}\n')
 
 
-@dp.message_handler(commands=["start"])
+@dp.message_handler(state='*', commands='start')
 async def start_command(message: types.Message, state: FSMContext):
     try:
         db_real.create_user(message.from_user.id, message.from_user.username, message.from_user.first_name,
@@ -107,7 +113,7 @@ async def start_command(message: types.Message, state: FSMContext):
         logger.warning(ex)
     finally:
         await bot.send_message(message.from_user.id,
-                               f"Что умеет этот бот?  \r\n \r\n👋Привет, {message.from_user.first_name}!  \r\n \r\n🤖Я – бот по организации встреч «Easymeet». С моей помощью ты сможешь:  \r\n \r\n🤝Создать или присоединиться к встрече с конкретной датой и временем  \r\n⏱Рассчитать время на сборы и дорогу с учетом средства передвижения \r\n⏳Получать напоминания о необходимости выходить \r\n🌍Узнать прогноз погоды в месте встречи  \r\n\n❗️В любой момент можно нажать /help, чтобы получить помощь\n ")
+                               f"👋Привет, {message.from_user.first_name}!  \r\n \r\n🤖Я – бот по организации встреч «Easymeet». С моей помощью ты сможешь:  \r\n \r\n🤝Создать или присоединиться к встрече с конкретной датой и временем  \r\n⏱Рассчитать время на сборы и дорогу с учетом средства передвижения \r\n⏳Получать напоминания о необходимости выходить \r\n🌍Узнать прогноз погоды в месте встречи  \r\n\n❗️В любой момент можно нажать /help, чтобы получить помощь\n ")
 
     kb = InlineKeyboardMarkup()
     buttons = [InlineKeyboardButton(text='⬆️ Создать встречу', callback_data='create_group'),
@@ -148,7 +154,8 @@ async def help_command(message: types.Message):
     help_data = "/cancel - если что-то пошло не так (Вернуться на старт)" \
                 "\n\n" \
                 "Отзывы о работе бота пишите, пожалуйста, сюда: @pushcip\n\n" \
-                "/create_group [дата] [время] [адрес] - создать группу поездки. Бот вернёт id группы\n" \
+
+    commands_list = "/create_group [дата] [время] [адрес] - создать группу поездки. Бот вернёт id группы\n" \
                 "/change_group_date [дата] - изменить дату встречи\n" \
                 "/change_group_time [время] - изменить время встречи\n" \
                 "/change_group_address [адрес] - изменить адрес встречи\n" \
@@ -458,7 +465,7 @@ async def input_password(message: Message, state: FSMContext):
     group_id = db_real.create_group(datetime_obj, data['address'], data["owner_id"], data['latitude'],
                                     data['longitude'], data['password'])
     await state.update_data(db_push=group_id)
-    await bot.send_message(chat_id=data["owner_id"], text=f'Готово! ID вашей встречи: {group_id}')
+    await bot.send_message(chat_id=data["owner_id"], text=f'Готово! ID вашей встречи: <b>{group_id}</b>', parse_mode=types.ParseMode.HTML)
     await state.finish()
     await CreateTripState.group_id.set()
     await state.update_data(group_id=group_id)
@@ -473,6 +480,8 @@ async def create_trip(user_id):
 @dp.message_handler(state=CreateTripState.departure)
 async def input_departure(message: Message, state: FSMContext):
     address_coordinates = get_coordinates_by_address(message.text)
+    await CreateTripState.coordinates.set()
+    await state.update_data(coordinates=address_coordinates)
     if not address_coordinates:
         await message.answer('Неправильный адрес')
         await CreateGroupState.address.set()
@@ -520,8 +529,8 @@ async def input_transport_type(callback_query: CallbackQuery, state: FSMContext)
                             trip_data[0] // 60)
         await bot.send_message(callback_query.from_user.id, f"🎉 Вы присоединились к группе {data['group_id']}!")
         await CreateTripState.delay.set()
-        await bot.send_message(chat_id=callback_query.from_user.id, text='📣 Введите количество минут, за которое нужно '
-                                                                         'напомнить Вам о поездке')
+        await bot.send_message(chat_id=callback_query.from_user.id, text=f'📣 Введите количество минут, за которое нужно '
+                                                                         f'напомнить Вам о поездке\n\n <i>Рекомендуется задавать время 15-20 минут, чтобы успеть собраться и выйти</i>', parse_mode=types.ParseMode.HTML)
         try:
             await bot.send_message(data['invitor'],
                                    f"❕ Пользователь {callback_query.from_user.username} присоединился к группе {data['group_id']}")
@@ -540,9 +549,11 @@ async def input_transport_type(message: Message, state: FSMContext):
         data = await state.get_data()
         group_id = data['group_id']
 
-        await message.answer("👌 Я предупрежу вас о выходе")
+        await message.answer("👌 Я предупрежу вас о выходе\n\n <i>Оцените бота командой /rate</i>", parse_mode=types.ParseMode.HTML)
 
-        coordinates = db_real.get_coordinates_by_group(group_id)
+        destination_coordinates = db_real.get_coordinates_by_group(group_id)
+        departure_coordinates = data['coordinates']
+        print(departure_coordinates)
 
         # db_real.set_noticed(group_id, message.from_user.id)
         meet_address, meet_time = db_real.get_group_data(group_id)
@@ -555,20 +566,60 @@ async def input_transport_type(message: Message, state: FSMContext):
         await sleep(result.total_seconds() - delay_time * 60 - trip_time * 60)
         await bot.send_message(message.from_user.id, f"❗️ Вам пора собираться на встречу {group_id}. По адресу: {meet_address}.")
 
-        destination_weather = weather.get_weather_by_coordinates(coordinates)
+        destination_weather = weather.get_weather_by_coordinates(destination_coordinates)
         await bot.send_message(message.from_user.id, f"Погода в точке назначения")
         await bot.send_message(message.from_user.id, destination_weather)
 
         await sleep(result.total_seconds() - trip_time * 60)
         await bot.send_message(message.from_user.id,
                                f"❗️❗️ Вам пора выезжать на встречу {group_id}. По адресу: {meet_address}.")
-        destination_weather = weather.get_weather_by_coordinates(coordinates)
+        destination_weather = weather.get_weather_by_coordinates(destination_coordinates)
         await bot.send_message(message.from_user.id, f"Погода в точке назначения")
         await bot.send_message(message.from_user.id, destination_weather)
 
     except Exception as ex:
         logger.warning(ex)
         await message.answer('Неправильный ввод, попробуйте еще раз')
+
+@dp.message_handler(commands='rate')
+async def rate_command(message: types.Message, state=FSMContext):
+    await RateState.rating.set()
+    keyboard = InlineKeyboardMarkup(row_width=5)
+
+    # Создаем кнопки с оценками и соответствующими смайликами
+    ratings = {
+        1: '😔',
+        2: '🙁',
+        3: '😐',
+        4: '🙂',
+        5: '😄'
+    }
+
+    for rating in range(1, 6):
+        emoji = ratings[rating]
+        button = InlineKeyboardButton(text=emoji, callback_data=str(rating))
+        keyboard.insert(button)
+
+    await message.reply("Пожалуйста, выберите оценку:", reply_markup=keyboard)
+
+@dp.callback_query_handler(state=RateState.rating)
+async def rating_handler(callback:CallbackQuery, state:FSMContext):
+    print(callback.data)
+    await state.update_data(rating=callback.data)
+    if callback.data in [1, 2, 3]:
+        await bot.send_message(callback.from_user.id,
+                               'Расскажите, пожалуйста, что пошло не так')
+    else:
+        await bot.send_message(callback.from_user.id, 'Спасибо, теперь можете оставить комментарий об опыте взаимодействия с ботом')
+    await RateState.comment.set()
+@dp.message_handler(state=RateState.comment)
+async def leave_comment(message: Message, state: FSMContext):
+    await state.update_data(comment=message.text)
+    data = await state.get_data()
+    db_real.add_rating(message.from_user.username, data['rating'], data['comment'])
+    await state.finish()
+    await bot.send_message(message.from_user.id, '😊\tСпасибо за отзыв\n\n <i>Чтобы вернуться на старт, нажмите /start</i>', parse_mode=types.ParseMode.HTML)
+
 
 
 if __name__ == "__main__":
