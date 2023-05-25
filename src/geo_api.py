@@ -39,7 +39,7 @@ def get_data_by_coordinates(departure: tuple, arrive: tuple, mode: str = "test")
     headers = {'Content-type': 'application/json'}
     print(departure, arrive)
     data = {
-         "points": [
+        "points": [
             {
                 "lat": departure[0],
                 "lon": departure[1]
@@ -53,6 +53,45 @@ def get_data_by_coordinates(departure: tuple, arrive: tuple, mode: str = "test")
         "targets": [1],
         "type": 'jam',
         "mode": mode
+    }
+    print(data)
+    request = requests.post(url, data=json.dumps(data), headers=headers)
+    print(request)
+    try:
+        data = request.json()
+        print(data)
+        return data["routes"][0]["duration"], data["routes"][0]["distance"]
+    except Exception as ex:
+        logger.warning(ex)
+
+
+def get_data_by_coordinates_public_transport(departure, arrive, start_time=None):
+    url = f'https://routing.api.2gis.com/combo_routes/2.0?key={GEO_API_KEY}'
+    headers = {'Content-type': 'application/json'}
+    print(departure, arrive)
+    data = {
+        "locale": "ru",
+        "source":
+            {
+                "name": "Point A",
+                "point":
+                    {
+                        "lat": departure[0],
+                        "lon": departure[1]
+                    }
+            },
+        "target":
+            {
+                "name": "Point B",
+                "point":
+                    {
+                        "lat": arrive[0],
+                        "lon": arrive[1]
+                    }
+            },
+        "transport": ["bus", "tram", "metro", "mcd", "mcc", "suburban_train", "aeroexpress"],
+        # "start_time": start_time,
+        # "enable_schedule": 'true'
     }
     print(data)
     request = requests.post(url, data=json.dumps(data), headers=headers)

@@ -145,3 +145,11 @@ def get_coordinates_by_group(group_id):
 def add_rating(username, rating, comment):
     record = [username, rating, comment]
     insert("ratings", record)
+
+
+def check_user_in_db(user_id):
+    user = select(f"select * from users where chat_id = {user_id}")
+    if user:
+        return True
+    else:
+        return False
