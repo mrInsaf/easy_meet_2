@@ -106,6 +106,7 @@ async def send_group_data(user_id, group_id):
 
 @dp.message_handler(state='*', commands='start')
 async def start_command(message: types.Message, state: FSMContext):
+    user_in_group = db_real.check_user_in_db(message.from_user.id)
     try:
         db_real.create_user(message.from_user.id, message.from_user.username, message.from_user.first_name,
                             message.from_user.last_name)
@@ -114,6 +115,12 @@ async def start_command(message: types.Message, state: FSMContext):
     finally:
         await bot.send_message(message.from_user.id,
                                f"👋Привет, {message.from_user.first_name}!  \r\n \r\n🤖Я – бот по организации встреч «Easymeet». С моей помощью ты сможешь:  \r\n \r\n🤝Создать или присоединиться к встрече с конкретной датой и временем  \r\n⏱Рассчитать время на сборы и дорогу с учетом средства передвижения \r\n⏳Получать напоминания о необходимости выходить \r\n🌍Узнать прогноз погоды в месте встречи  \r\n\n❗️В любой момент можно нажать /help, чтобы получить помощь\n ")
+
+    if not user_in_group:
+        video_path = 'Video_tutorial.MP4'  # Путь к видео файлу на вашем сервере
+
+        # Отправка видео
+        await bot.send_video(chat_id=message.chat.id, video=open(video_path, 'rb'))
 
     kb = InlineKeyboardMarkup()
     buttons = [InlineKeyboardButton(text='⬆️ Создать встречу', callback_data='create_group'),
