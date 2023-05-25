@@ -92,7 +92,7 @@ async def cancel_handler(message: types.Message, state: FSMContext):
     # Cancel state and inform user about it
     await state.finish()
     # And remove keyboard (just in case)
-    await bot.send_message(message.from_user.id, '<i>Состояние сброшено</i>\n\n /start\t - Перейти на старт\n /rate\t - Оценить бота\n /help\t - Получить помощь', reply_markup=types.ReplyKeyboardRemove(), parse_mode=types.ParseMode.HTML)
+    await bot.send_message(message.from_user.id, '<i>Состояние сброшено</i>\n\n/start\t - Перейти на старт\n/rate\t - Оценить бота\n/help\t - Получить помощь\n/share\t - Поделиться ссылкой на бота', reply_markup=types.ReplyKeyboardRemove(), parse_mode=types.ParseMode.HTML)
 
 
 
@@ -465,7 +465,7 @@ async def input_password(message: Message, state: FSMContext):
     group_id = db_real.create_group(datetime_obj, data['address'], data["owner_id"], data['latitude'],
                                     data['longitude'], data['password'])
     await state.update_data(db_push=group_id)
-    await bot.send_message(chat_id=data["owner_id"], text=f'Готово! ID вашей встречи: <b>{group_id}</b>', parse_mode=types.ParseMode.HTML)
+    await bot.send_message(chat_id=data["owner_id"], text=f'Готово! ID вашей встречи: <b>{group_id}</b>\n\n <i>Ссылка на бота, которую можно отправить другу: t.me/EasyMeet_3_bot</i>', parse_mode=types.ParseMode.HTML)
     await state.finish()
     await CreateTripState.group_id.set()
     await state.update_data(group_id=group_id)
@@ -530,7 +530,7 @@ async def input_transport_type(callback_query: CallbackQuery, state: FSMContext)
         await bot.send_message(callback_query.from_user.id, f"🎉 Вы присоединились к группе {data['group_id']}!")
         await CreateTripState.delay.set()
         await bot.send_message(chat_id=callback_query.from_user.id, text=f'📣 Введите количество минут, за которое нужно '
-                                                                         f'напомнить Вам о поездке\n\n <i>Рекомендуется задавать время 15-20 минут, чтобы успеть собраться и выйти</i>', parse_mode=types.ParseMode.HTML)
+                                                                         f'напомнить Вам о поездке\n\n <i>Рекомендуется задавать время 20-30 минут, чтобы успеть собраться и выйти</i>', parse_mode=types.ParseMode.HTML)
         try:
             await bot.send_message(data['invitor'],
                                    f"❕ Пользователь {callback_query.from_user.username} присоединился к группе {data['group_id']}")
@@ -549,7 +549,7 @@ async def input_transport_type(message: Message, state: FSMContext):
         data = await state.get_data()
         group_id = data['group_id']
 
-        await message.answer("👌 Я предупрежу вас о выходе\n\n <i>Оцените бота командой /rate</i>", parse_mode=types.ParseMode.HTML)
+        await message.answer("👌 Я предупрежу вас о выходе\n\n <i>Оцените бота командой /rate\n\nЧтобы продолжить пользоваться ботом, нажмите /start</i>", parse_mode=types.ParseMode.HTML)
 
         destination_coordinates = db_real.get_coordinates_by_group(group_id)
         departure_coordinates = data['coordinates']
@@ -564,7 +564,7 @@ async def input_transport_type(message: Message, state: FSMContext):
         result = datetime_object - now
         await state.finish()
         await sleep(result.total_seconds() - delay_time * 60 - trip_time * 60)
-        await bot.send_message(message.from_user.id, f"❗️ Вам пора собираться на встречу {group_id}. По адресу: {meet_address}.")
+        await bot.send_message(message.from_user.id, f"❗️ Вам пора собираться на встречу {group_id}. По адресу: {meet_address}.\n\n <b>Внимание</b> Вам следует выезжать через {delay_time} минут, в {str(datetime.datetime.now() + datetime.timedelta(minutes=15))[10:][:6]}", parse_mode=types.ParseMode.HTML)
 
         destination_weather = weather.get_weather_by_coordinates(destination_coordinates)
         await bot.send_message(message.from_user.id, f"Погода в точке назначения")
@@ -620,6 +620,10 @@ async def leave_comment(message: Message, state: FSMContext):
     await state.finish()
     await bot.send_message(message.from_user.id, '😊\tСпасибо за отзыв\n\n <i>Чтобы вернуться на старт, нажмите /start</i>', parse_mode=types.ParseMode.HTML)
 
+
+@dp.message_handler(state='*', commands='share')
+async def share_command(message: Message):
+    await message.answer('Ссылка на бота: t.me/EasyMeet_3_bot')
 
 
 if __name__ == "__main__":
